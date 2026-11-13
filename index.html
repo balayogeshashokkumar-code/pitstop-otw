@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#f97316" />
+  <meta name="description" content="Find verified food, stays, fuel, EV chargers, and clean washrooms along your highway route." />
+  <title>PitStop OTW — Highway Route & Pit-Stop Planner</title>
+
+  <!-- PWA Manifest & Icon (Relative paths for GitHub Pages subpath safety) -->
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/854/854878.png" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Leaflet 1.9.4 Map CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      background-color: #0b0f19;
+      color: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .leaflet-container { background: #111827; font-family: inherit; }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+      background: #1e293b;
+      color: #f8fafc;
+      border: 1px solid #334155;
+      border-radius: 12px;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    input[type="range"] { accent-color: #f97316; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Top App Bar -->
+  <header class="sticky top-0 z-40 bg-slate-950/95 backdrop-blur border-b border-slate-800 px-4 py-3">
+    <div class="max-w-6xl mx-auto flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center font-black text-slate-950 text-lg shadow-lg shadow-orange-500/20">
+          P
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-bold text-base sm:text-lg tracking-tight text-white">PitStop OTW</h1>
+            <span id="dbBadge" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              Loading stops...
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400 hidden sm:block">Verified highway food, stays, fuel & clean washrooms along your route</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="installBtn" class="hidden px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-400 text-slate-950 font-semibold text-xs transition shadow">
+          + Install App
+        </button>
+        <button id="shareTripBtn" onclick="shareTripWhatsApp()" class="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-medium transition">
+          Share Route
+        </button>
+        <button onclick="openAddModal()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition">
+          + Add Stop
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-4 py-3 flex flex-col gap-3">
+
+    <!-- Route Planner & Quick Corridor Presets -->
+    <section class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-xl">
+      <!-- Quick Corridor Chips -->
+      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2.5 mb-2.5 border-b border-slate-800/80">
+        <span class="text-[11px] uppercase tracking-wider text-slate-500 font-semibold shrink-0">Corridors:</span>
+        <button onclick="loadPreset('Coimbatore', [11.0168, 76.9558], 'Bengaluru', [12.9716, 77.5946])"
+          class="shrink-0 text-xs px-2.5 py-1 rounded-full bg-slate-800 hover:bg-orange-500/20 hover:text-orange-300 border border-slate-700 text-slate-300 transition">
+          Coimbatore → Bengaluru
+        </button>
+        <button onclick="loadPreset('Coimbatore', [11.0168, 76.9558], 'Ooty', [11.4102, 76.6950])"
+          class="shrink-0 text-xs px-2.5 py-1 rounded-full bg-slate-800 hover:bg-orange-500/20 hover:text-orange-300 border border-slate-700 text-slate-300 transition">
+          Coimbatore → Ooty
+        </button>
+        <button onclick="loadPreset('Chennai', [13.0827, 80.2707], 'Pondicherry', [11.9416, 79.8083])"
+          class="shrink-0 text-xs px-2.5 py-1 rounded-full bg-slate-800 hover:bg-orange-500/20 hover:text-orange-300 border border-slate-700 text-slate-300 transition">
+          Chennai → Pondicherry
+        </button>
+        <button onclick="loadPreset('Salem', [11.6643, 78.1460], 'Kochi', [9.9312, 76.2673])"
+          class="shrink-0 text-xs px-2.5 py-1 rounded-full bg-slate-800 hover:bg-orange-500/20 hover:text-orange-300 border border-slate-700 text-slate-300 transition">
+          Salem → Kochi
+        </button>
+      </div>
+
+      <!-- Start & Destination Inputs -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
+        <div class="md:col-span-5 relative">
+          <label class="block text-[11px] font-medium text-slate-400 mb-1">Starting From</label>
+          <div class="flex gap-1.5">
+            <input id="startInput" type="text" value="Coimbatore" placeholder="City, landmark, or highway..."
+              autocomplete="off" oninput="handleSearchInput('start', this.value)"
+              class="w-full bg-slate-950 border border-slate-700 focus:border-orange-500 rounded-xl px-3 py-2 text-sm text-white outline-none" />
+            <button onclick="useMyLocation()" title="Use GPS Location"
+              class="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-300 shrink-0">
+              GPS
+            </button>
+          </div>
+          <div id="startSuggestions" class="hidden absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto"></div>
+        </div>
+
+        <div class="md:col-span-5 relative">
+          <label class="block text-[11px] font-medium text-slate-400 mb-1">Destination</label>
+          <input id="endInput" type="text" value="Bengaluru" placeholder="Where are you heading?"
+            autocomplete="off" oninput="handleSearchInput('end', this.value)"
+            class="w-full bg-slate-950 border border-slate-700 focus:border-orange-500 rounded-xl px-3 py-2 text-sm text-white outline-none" />
+          <div id="endSuggestions" class="hidden absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto"></div>
+        </div>
+
+        <div class="md:col-span-2">
+          <button id="findBtn" onclick="calculateRoute()"
+            class="w-full py-2 px-4 rounded-xl bg-orange-500 hover:bg-orange-400 active:scale-[0.99] text-slate-950 font-bold text-sm transition shadow-lg shadow-orange-500/20">
+            Find Stops
+          </button>
+        </div>
+      </div>
+
+      <!-- Filter Pills & Detour Controls -->
+      <div class="mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2.5">
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar" id="categoryFilters">
+          <button data-cat="all" onclick="setCategory('all')" class="cat-btn px-3 py-1 rounded-full text-xs font-semibold bg-orange-500 text-slate-950">All Stops</button>
+          <button data-cat="food" onclick="setCategory('food')" class="cat-btn px-3 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700">Food & Cafes</button>
+          <button data-cat="stay" onclick="setCategory('stay')" class="cat-btn px-3 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700">Stays</button>
+          <button data-cat="fuel" onclick="setCategory('fuel')" class="cat-btn px-3 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700">Fuel & EV</button>
+          <button data-cat="washroom" onclick="setCategory('washroom')" class="cat-btn px-3 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700">Washrooms</button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 text-xs text-slate-300">
+          <label class="flex items-center gap-1.5 cursor-pointer select-none">
+            <input id="filterParking" type="checkbox" onchange="renderStops()" class="rounded accent-orange-500" />
+            <span>Safe Parking</span>
+          </label>
+          <label class="flex items-center gap-1.5 cursor-pointer select-none">
+            <input id="filter24x7" type="checkbox" onchange="renderStops()" class="rounded accent-orange-500" />
+            <span>24/7 Open</span>
+          </label>
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400">Max Detour:</span>
+            <input id="detourSlider" type="range" min="1" max="15" value="8" oninput="updateDetourLabel(this.value)" class="w-20" />
+            <span id="detourValue" class="font-semibold text-orange-400 w-10">8 min</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Route Summary Banner -->
+    <div id="routeBanner" class="flex flex-wrap items-center justify-between gap-2 bg-slate-900/70 border border-slate-800 rounded-xl px-3.5 py-2 text-xs">
+      <div class="flex items-center gap-3">
+        <span id="routeSummaryText" class="text-slate-200 font-medium">Calculating route...</span>
+        <span id="stopCountBadge" class="px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-300 font-semibold">0 stops OTW</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="osmBtn" onclick="fetchLiveOSM()" class="px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 font-medium transition">
+          + Fetch Live OSM POIs
+        </button>
+      </div>
+    </div>
+
+    <!-- Split Map & Pit-Stop Cards -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-3 flex-1">
+      <!-- Interactive Leaflet Map -->
+      <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden relative min-h-[300px] lg:min-h-[520px]">
+        <div id="map" class="w-full h-full min-h-[300px] lg:min-h-[520px] z-10"></div>
+      </div>
+
+      <!-- Sorted Pit-Stop Feed -->
+      <div class="lg:col-span-5 flex flex-col gap-2.5 max-h-[560px] overflow-y-auto pr-0.5" id="stopsList">
+        <!-- Stop cards injected here -->
+      </div>
+    </section>
+  </main>
+
+  <!-- Add Custom Stop Modal -->
+  <div id="addModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-4 shadow-2xl">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-bold text-base text-white">Add Highway Pit-Stop</h2>
+        <button onclick="closeAddModal()" class="text-slate-400 hover:text-white text-lg">&times;</button>
+      </div>
+      <form onsubmit="saveCustomStop(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1">Place Name *</label>
+          <input id="newName" required placeholder="e.g. Murugan Idli Shop — Krishnagiri" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white" />
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-slate-400 mb-1">Category</label>
+            <select id="newCat" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white">
+              <option value="food">Food & Cafe</option>
+              <option value="stay">Stay / Hotel</option>
+              <option value="fuel">Fuel / EV Charger</option>
+              <option value="washroom">Clean Washroom</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Detour (mins)</label>
+            <input id="newDetour" type="number" min="1" max="15" value="2" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white" />
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-slate-400 mb-1">Latitude *</label>
+            <input id="newLat" type="number" step="any" required placeholder="12.5186" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white" />
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Longitude *</label>
+            <input id="newLng" type="number" step="any" required placeholder="78.2137" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Highlight / Best For</label>
+          <input id="newBestFor" placeholder="Clean western washrooms, filter coffee & safe parking" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white" />
+        </div>
+        <div class="flex items-center gap-4 pt-1">
+          <label class="flex items-center gap-1.5"><input id="newWashroom" type="checkbox" checked /> Clean Washroom</label>
+          <label class="flex items-center gap-1.5"><input id="newParking" type="checkbox" checked /> Safe Parking</label>
+          <label class="flex items-center gap-1.5"><input id="new24x7" type="checkbox" /> 24/7</label>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeAddModal()" class="px-3 py-2 rounded-lg bg-slate-800 text-slate-300">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-orange-500 text-slate-950 font-bold">Save to Device</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // 1. Register Service Worker & PWA Install Prompt
+    let deferredPrompt = null;
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      document.getElementById('installBtn').classList.remove('hidden');
+    });
+    document.getElementById('installBtn').addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      document.getElementById('installBtn').classList.add('hidden');
+    });
+
+    // 2. Fallback Curated Dataset (Used if stops.json is unreachable offline)
+    const FALLBACK_STOPS = [
+      {
+        id: "stop-1",
+        name: "A2B Adyar Ananda Bhavan — Avinashi Bypass",
+        category: "food",
+        lat: 11.1924,
+        lng: 77.2683,
+        detourMins: 2,
+        cleanWashroom: true,
+        safeParking: true,
+        open24x7: false,
+        verified: true,
+        bestFor: "Filter Coffee, South Indian Breakfast & Family Washrooms",
+        whatsapp: "919842200001",
+        bookingUrl: ""
+      },
+      {
+        id: "stop-2",
+        name: "Shell Select & EV Fast Hub — Salem NH-44",
+        category: "fuel",
+        lat: 11.6643,
+        lng: 78.1460,
+        detourMins: 1,
+        cleanWashroom: true,
+        safeParking: true,
+        open24x7: true,
+        verified: true,
+        bestFor: "60kW DC Fast Charger, Air Check & Clean Restrooms",
+        whatsapp: "",
+        bookingUrl: ""
+      },
+      {
+        id: "stop-3",
+        name: "Radisson Salem — Highway Stopover",
+        category: "stay",
+        lat: 11.6758,
+        lng: 78.1245,
+        detourMins: 3,
+        cleanWashroom: true,
+        safeParking: true,
+        open24x7: true,
+        verified: true,
+        bestFor: "Covered Basement Bike/Car Parking & Overnight Transit Stay",
+        whatsapp: "",
+        bookingUrl: "https://www.booking.com/searchresults.html?ss=Salem+India"
+      },
+      {
+        id: "stop-4",
+        name: "Biker's Pitstop Cafe — Mettupalayam Ghat Base",
+        category: "food",
+        lat: 11.3005,
+        lng: 76.9350,
+        detourMins: 2,
+        cleanWashroom: true,
+        safeParking: true,
+        open24x7: false,
+        verified: true,
+        bestFor: "Pre-Ghat Espresso, Bun Butter Jam & Helmet Rack",
+        whatsapp: "919842200002",
+        bookingUrl: ""
+      },
+      {
+        id: "stop-5",
+        name: "BPCL Highway Rest & Washroom Plaza — Dharmapuri",
+        category: "washroom",
+        lat: 12.1211,
+        lng: 78.1582,
+        detourMins: 1,
+        cleanWashroom: true,
+        safeParking: true,
+        open24x7: true,
+        verified: true,
+        bestFor: "24/7 Attended Restrooms, Drinking Water & Fuel",
+        whatsapp: "",
+        bookingUrl: ""
+      }
+    ];
+
+    // 3. App State
+    let curatedStops = [];
+    let liveOsmStops = [];
+    let activeCategory = 'all';
+    let startCoords = [11.0168, 76.9558]; // Coimbatore
+    let endCoords = [12.9716, 77.5946];   // Bengaluru
+    let routeCoords = [];                 // Array of [lat, lng]
+    let totalDistanceKm = 0;
+    let totalDurationMins = 0;
+    let searchTimers = {};
+
+    // 4. Initialize Leaflet Map
+    const map = L.map('map', { zoomControl: true }).setView([11.8, 77.4], 8);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap &copy; CARTO',
+      subdomains: 'abcd',
+      maxZoom: 19
+    }).addTo(map);
+
+    let routeLayer = L.layerGroup().addTo(map);
+    let markersLayer = L.layerGroup().addTo(map);
+
+    // 5. Load stops.json from GitHub Pages + Local Custom Stops
+    async function loadStopsDatabase() {
+      const badge = document.getElementById('dbBadge');
+      try {
+        const res = await fetch('./stops.json?v=' + Date.now());
+        if (!res.ok) throw new Error('stops.json missing');
+        const jsonStops = await res.json();
+        curatedStops = Array.isArray(jsonStops) ? jsonStops : FALLBACK_STOPS;
+        badge.textContent = `${curatedStops.length} Curated Stops`;
+      } catch (err) {
+        curatedStops = [...FALLBACK_STOPS];
+        badge.textContent = `${curatedStops.length} Offline Stops`;
+      }
+      const savedLocal = JSON.parse(localStorage.getItem('pitstop_custom_stops') || '[]');
+      if (savedLocal.length) {
+        curatedStops = [...savedLocal, ...curatedStops];
+      }
+    }
+
+    // 6. Haversine Distance (km)
+    function haversineKm(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    // 7. Photon Autocomplete Geocoding
+    function handleSearchInput(type, query) {
+      clearTimeout(searchTimers[type]);
+      const box = document.getElementById(type + 'Suggestions');
+      if (!query || query.trim().length < 2) {
+        box.classList.add('hidden');
+        return;
+      }
+      searchTimers[type] = setTimeout(async () => {
+        try {
+          const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query + ' India')}&limit=5`;
+          const res = await fetch(url);
+          const data = await res.json();
+          if (!data.features || !data.features.length) {
+            box.classList.add('hidden');
+            return;
+          }
+          box.innerHTML = data.features.map(f => {
+            const [lng, lat] = f.geometry.coordinates;
+            const name = f.properties.name || query;
+            const state = f.properties.state || f.properties.city || '';
+            const label = state ? `${name}, ${state}` : name;
+            return `<button type="button" onclick="selectPlace('${type}', '${label.replace(/'/g, "\\'")}', ${lat}, ${lng})"
+              class="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 border-b border-slate-800/60 last:border-0 text-slate-200">
+              ${label}
+            </button>`;
+          }).join('');
+          box.classList.remove('hidden');
+        } catch (e) {
+          box.classList.add('hidden');
+        }
+      }, 300);
+    }
+
+    function selectPlace(type, label, lat, lng) {
+      document.getElementById(type + 'Input').value = label;
+      document.getElementById(type + 'Suggestions').classList.add('hidden');
+      if (type === 'start') startCoords = [lat, lng];
+      else endCoords = [lat, lng];
+      calculateRoute();
+    }
+
+    function loadPreset(startName, sCoords, endName, eCoords) {
+      document.getElementById('startInput').value = startName;
+      document.getElementById('endInput').value = endName;
+      startCoords = sCoords;
+      endCoords = eCoords;
+      liveOsmStops = [];
+      calculateRoute();
+    }
+
+    function useMyLocation() {
+      if (!navigator.geolocation) return alert('Geolocation not supported on this browser.');
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          startCoords = [pos.coords.latitude, pos.coords.longitude];
+          document.getElementById('startInput').value = 'My Current Location';
+          calculateRoute();
+        },
+        () => alert('Please allow location access to use GPS start.')
+      );
+    }
+
+    // 8. Fetch Driving Route from OSRM
+    async function calculateRoute() {
+      const summaryEl = document.getElementById('routeSummaryText');
+      summaryEl.textContent = 'Finding fastest highway route...';
+      routeLayer.clearLayers();
+
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${startCoords[1]},${startCoords[0]};${endCoords[1]},${endCoords[0]}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!data.routes || !data.routes.length) throw new Error('No route');
+
+        const route = data.routes[0];
+        routeCoords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+        totalDistanceKm = Math.round(route.distance / 1000);
+        totalDurationMins = Math.round(route.duration / 60);
+      } catch (e) {
+        // Straight-line fallback if OSRM is temporarily busy
+        routeCoords = [startCoords, endCoords];
+        totalDistanceKm = Math.round(haversineKm(...startCoords, ...endCoords) * 1.2);
+        totalDurationMins = Math.round(totalDistanceKm * 1.1);
+      }
+
+      const hrs = Math.floor(totalDurationMins / 60);
+      const mins = totalDurationMins % 60;
+      summaryEl.textContent = `${totalDistanceKm} km • ~${hrs}h ${mins}m drive`;
+
+      // Draw Route Polyline + Start/End Markers
+      const poly = L.polyline(routeCoords, { color: '#f97316', weight: 5, opacity: 0.85 }).addTo(routeLayer);
+      L.circleMarker(startCoords, { radius: 7, color: '#22c55e', fillColor: '#22c55e', fillOpacity: 1 })
+        .bindPopup('<b>Start:</b> ' + document.getElementById('startInput').value).addTo(routeLayer);
+      L.circleMarker(endCoords, { radius: 7, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 1 })
+        .bindPopup('<b>Destination:</b> ' + document.getElementById('endInput').value).addTo(routeLayer);
+
+      map.fitBounds(poly.getBounds(), { padding: [35, 35] });
+      renderStops();
+    }
+
+    // 9. Match & Sort Pit-Stops Along the Route Polyline
+    function getStopsAlongRoute() {
+      const maxDetour = Number(document.getElementById('detourSlider').value);
+      const reqParking = document.getElementById('filterParking').checked;
+      const req24x7 = document.getElementById('filter24x7').checked;
+      const allPool = [...curatedStops, ...liveOsmStops];
+
+      // Sample ~60 points along route polyline for fast perpendicular distance checks
+      const step = Math.max(1, Math.floor(routeCoords.length / 60));
+      const sampled = [];
+      let cumulativeKm = 0;
+      for (let i = 0; i < routeCoords.length; i += step) {
+        if (i > 0) {
+          cumulativeKm += haversineKm(
+            routeCoords[i - step][0], routeCoords[i - step][1],
+            routeCoords[i][0], routeCoords[i][1]
+          );
+        }
+        sampled.push({ coord: routeCoords[i], kmFromStart: cumulativeKm });
+      }
+
+      const matched = [];
+      for (const stop of allPool) {
+        if (activeCategory !== 'all' && stop.category !== activeCategory) continue;
+        if (reqParking && !stop.safeParking) continue;
+        if (req24x7 && !stop.open24x7) continue;
+
+        let minKmOffRoute = Infinity;
+        let kmAlongRoute = 0;
+        for (const pt of sampled) {
+          const d = haversineKm(stop.lat, stop.lng, pt.coord[0], pt.coord[1]);
+          if (d < minKmOffRoute) {
+            minKmOffRoute = d;
+            kmAlongRoute = pt.kmFromStart;
+          }
+        }
+
+        const estDetourMins = stop.detourMins || Math.max(1, Math.round(minKmOffRoute * 2));
+        // Keep stops within 8 km of highway and within user's max detour slider
+        if (minKmOffRoute <= 8 && estDetourMins <= maxDetour) {
+          matched.push({
+            ...stop,
+            kmAhead: Math.round(kmAlongRoute),
+            detourDisplay: estDetourMins
+          });
+        }
+      }
+
+      // Sort chronologically from Start -> Destination
+      return matched.sort((a, b) => a.kmAhead - b.kmAhead);
+    }
+
+    // 10. Render Cards & Map Pins
+    function renderStops() {
+      const listEl = document.getElementById('stopsList');
+      const countBadge = document.getElementById('stopCountBadge');
+      markersLayer.clearLayers();
+
+      const stops = getStopsAlongRoute();
+      countBadge.textContent = `${stops.length} stop${stops.length === 1 ? '' : 's'} OTW`;
+
+      if (!stops.length) {
+        listEl.innerHTML = `
+          <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 text-center">
+            <p class="text-sm font-semibold text-slate-200 mb-1">No curated stops matched on this stretch yet</p>
+            <p class="text-xs text-slate-400 mb-3">Try increasing Max Detour, clearing filters, or fetching live OpenStreetMap roadside POIs.</p>
+            <button onclick="fetchLiveOSM()" class="px-3.5 py-2 rounded-xl bg-sky-500/20 text-sky-300 border border-sky-500/30 text-xs font-semibold">
+              + Fetch Live OSM Stops Along Route
+            </button>
+          </div>`;
+        return;
+      }
+
+      const catColors = {
+        food: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+        stay: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+        fuel: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+        washroom: 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+      };
+
+      listEl.innerHTML = stops.map(s => {
+        const gmapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}`;
+        const waUrl = s.whatsapp
+          ? `https://wa.me/${s.whatsapp}?text=${encodeURIComponent(`Hi ${s.name}, found you on PitStop OTW! Reaching in ~30 mins.`)}`
+          : '';
+
+        // Add Map Marker
+        const marker = L.circleMarker([s.lat, s.lng], {
+          radius: s.verified ? 8 : 6,
+          color: s.verified ? '#f97316' : '#38bdf8',
+          fillColor: s.verified ? '#fb923c' : '#0ea5e9',
+          fillOpacity: 0.95
+        }).bindPopup(`
+          <div class="text-xs">
+            <div class="font-bold text-white mb-0.5">${s.name}</div>
+            <div class="text-slate-300 mb-1.5">${s.kmAhead} km ahead • ${s.detourDisplay} min detour</div>
+            <a href="${gmapsUrl}" target="_blank" class="text-orange-400 font-semibold underline">Navigate in Google Maps →</a>
+          </div>
+        `).addTo(markersLayer);
+
+        return `
+          <article class="bg-slate-900 border ${s.verified ? 'border-slate-700/90' : 'border-slate-800'} rounded-2xl p-3.5 hover:border-orange-500/50 transition">
+            <div class="flex items-start justify-between gap-2 mb-1.5">
+              <div>
+                <div class="flex flex-wrap items-center gap-1.5 mb-1">
+                  <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${catColors[s.category] || catColors.food}">
+                    ${s.category}
+                  </span>
+                  ${s.verified ? `<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-300 border border-orange-500/30">✓ Verified Pit-Stop</span>` : `<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">OSM Live</span>`}
+                </div>
+                <h3 onclick="focusStop(${s.lat}, ${s.lng})" class="font-bold text-sm text-white cursor-pointer hover:text-orange-400 transition">
+                  ${s.name}
+                </h3>
+              </div>
+              <div class="text-right shrink-0">
+                <div class="text-xs font-bold text-orange-400">${s.kmAhead} km</div>
+                <div class="text-[11px] text-slate-400">+${s.detourDisplay} min detour</div>
+              </div>
+            </div>
+
+            <p class="text-xs text-slate-300 mb-2.5">${s.bestFor || 'Highway pit-stop along your route'}</p>
+
+            <div class="flex flex-wrap gap-1.5 mb-3 text-[11px]">
+              ${s.cleanWashroom ? `<span class="px-2 py-0.5 rounded-md bg-slate-800 text-sky-300">Clean Washroom</span>` : ''}
+              ${s.safeParking ? `<span class="px-2 py-0.5 rounded-md bg-slate-800 text-emerald-300">Safe Parking</span>` : ''}
+              ${s.open24x7 ? `<span class="px-2 py-0.5 rounded-md bg-slate-800 text-amber-300">24/7 Open</span>` : ''}
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80 text-xs">
+              <a href="${gmapsUrl}" target="_blank" rel="noopener"
+                class="flex-1 text-center py-1.5 px-3 rounded-xl bg-orange-500 hover:bg-orange-400 text-slate-950 font-bold transition">
+                Navigate
+              </a>
+              ${waUrl ? `
+                <a href="${waUrl}" target="_blank" rel="noopener"
+                  class="py-1.5 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 font-semibold transition">
+                  WhatsApp Order
+                </a>` : ''}
+              ${s.bookingUrl ? `
+                <a href="${s.bookingUrl}" target="_blank" rel="noopener"
+                  class="py-1.5 px-3 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 font-semibold transition">
+                  Book Stay
+                </a>` : ''}
+            </div>
+          </article>`;
+      }).join('');
+    }
+
+    function focusStop(lat, lng) {
+      map.setView([lat, lng], 14, { animate: true });
+    }
+
+    // 11. Fetch Live OpenStreetMap Roadside POIs via Overpass API
+    async function fetchLiveOSM() {
+      const btn = document.getElementById('osmBtn');
+      if (routeCoords.length < 2) return;
+      btn.textContent = 'Scanning highway...';
+      btn.disabled = true;
+
+      try {
+        // Sample 4 evenly spaced midpoints along the route
+        const sampleIndices = [0.2, 0.4, 0.6, 0.8].map(r => Math.floor(routeCoords.length * r));
+        const aroundClauses = sampleIndices.map(idx => {
+          const [lat, lng] = routeCoords[idx];
+          return `
+            node["amenity"~"restaurant|cafe|fast_food|fuel|toilets"](around:2500,${lat},${lng});
+            node["tourism"~"hotel|motel|guest_house"](around:3000,${lat},${lng});
+          `;
+        }).join('');
+
+        const query = `[out:json][timeout:15];(${aroundClauses});out body 40;`;
+        const res = await fetch('https://overpass-api.de/api/interpreter', {
+          method: 'POST',
+          body: 'data=' + encodeURIComponent(query)
+        });
+        const data = await res.json();
+
+        liveOsmStops = (data.elements || [])
+          .filter(el => el.tags && el.tags.name)
+          .map(el => {
+            const t = el.tags;
+            let category = 'food';
+            if (t.tourism) category = 'stay';
+            else if (t.amenity === 'fuel') category = 'fuel';
+            else if (t.amenity === 'toilets') category = 'washroom';
+
+            return {
+              id: 'osm-' + el.id,
+              name: t.name,
+              category,
+              lat: el.lat,
+              lng: el.lon,
+              cleanWashroom: t.toilets === 'yes' || category === 'washroom',
+              safeParking: Boolean(t.parking),
+              open24x7: t.opening_hours === '24/7',
+              verified: false,
+              bestFor: t.cuisine ? `Cuisine: ${t.cuisine}` : `Live roadside ${category} on OpenStreetMap`
+            };
+          });
+
+        btn.textContent = `✓ ${liveOsmStops.length} Live OSM Added`;
+        renderStops();
+      } catch (e) {
+        btn.textContent = 'OSM Busy — Retry';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // 12. UI Controls & WhatsApp Trip Sharing
+    function setCategory(cat) {
+      activeCategory = cat;
+      document.querySelectorAll('.cat-btn').forEach(btn => {
+        const active = btn.dataset.cat === cat;
+        btn.className = active
+          ? 'cat-btn px-3 py-1 rounded-full text-xs font-semibold bg-orange-500 text-slate-950'
+          : 'cat-btn px-3 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700';
+      });
+      renderStops();
+    }
+
+    function updateDetourLabel(val) {
+      document.getElementById('detourValue').textContent = `${val} min`;
+      renderStops();
+    }
+
+    function shareTripWhatsApp() {
+      const from = document.getElementById('startInput').value;
+      const to = document.getElementById('endInput').value;
+      const stops = getStopsAlongRoute().slice(0, 5);
+      const stopLines = stops.map((s, i) => `${i + 1}. ${s.name} (${s.kmAhead} km)`).join('\n');
+      const shareUrl = `${window.location.origin}${window.location.pathname}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+      const msg = `PitStop OTW Route: ${from} → ${to} (${totalDistanceKm} km)\n\nTop Pit-Stops:\n${stopLines || 'Explore stops on map'}\n\nOpen live route:\n${shareUrl}`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+    }
+
+    function openAddModal() { document.getElementById('addModal').classList.remove('hidden'); }
+    function closeAddModal() { document.getElementById('addModal').classList.add('hidden'); }
+
+    function saveCustomStop(e) {
+      e.preventDefault();
+      const newStop = {
+        id: 'custom-' + Date.now(),
+        name: document.getElementById('newName').value.trim(),
+        category: document.getElementById('newCat').value,
+        lat: parseFloat(document.getElementById('newLat').value),
+        lng: parseFloat(document.getElementById('newLng').value),
+        detourMins: parseInt(document.getElementById('newDetour').value, 10) || 2,
+        cleanWashroom: document.getElementById('newWashroom').checked,
+        safeParking: document.getElementById('newParking').checked,
+        open24x7: document.getElementById('new24x7').checked,
+        verified: true,
+        bestFor: document.getElementById('newBestFor').value.trim() || 'Rider-added verified pit-stop'
+      };
+      const existing = JSON.parse(localStorage.getItem('pitstop_custom_stops') || '[]');
+      existing.unshift(newStop);
+      localStorage.setItem('pitstop_custom_stops', JSON.stringify(existing));
+      curatedStops.unshift(newStop);
+      closeAddModal();
+      e.target.reset();
+      renderStops();
+    }
+
+    // 13. Boot App & Support ?from=...&to=... Shared Links
+    (async function init() {
+      await loadStopsDatabase();
+      const params = new URLSearchParams(window.location.search);
+      const fromParam = params.get('from');
+      const toParam = params.get('to');
+      if (fromParam && toParam) {
+        document.getElementById('startInput').value = fromParam;
+        document.getElementById('endInput').value = toParam;
+        try {
+          const [r1, r2] = await Promise.all([
+            fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(fromParam + ' India')}&limit=1`).then(r => r.json()),
+            fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(toParam + ' India')}&limit=1`).then(r => r.json())
+          ]);
+          if (r1.features?.[0]) startCoords = [r1.features[0].geometry.coordinates[1], r1.features[0].geometry.coordinates[0]];
+          if (r2.features?.[0]) endCoords = [r2.features[0].geometry.coordinates[1], r2.features[0].geometry.coordinates[0]];
+        } catch (e) {}
+      }
+      calculateRoute();
+    })();
+  </script>
+</body>
+</html>
+  
