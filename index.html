@@ -7,16 +7,16 @@
   <meta name="description" content="Find verified food, stays, fuel, EV chargers, and clean washrooms along your highway route." />
   <title>PitStop OTW — Highway Route & Pit-Stop Planner</title>
 
-  <!-- PWA Manifest & Icon (Relative paths for GitHub Pages subpath safety) -->
+  <!-- PWA Manifest & Icon -->
   <link rel="manifest" href="./manifest.json" />
   <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/854/854878.png" />
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Leaflet 1.9.4 Map CSS & JS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <!-- Leaflet 1.9.4 Map CSS & JS (jsDelivr CDN) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -25,7 +25,12 @@
       color: #f1f5f9;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
+    #map { height: 340px; width: 100%; }
+    @media (min-width: 1024px) { #map { height: 520px; } }
     .leaflet-container { background: #111827; font-family: inherit; }
+    .dark-tiles {
+      filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(90%);
+    }
     .leaflet-popup-content-wrapper, .leaflet-popup-tip {
       background: #1e293b;
       color: #f8fafc;
@@ -173,8 +178,8 @@
     <!-- Split Map & Pit-Stop Cards -->
     <section class="grid grid-cols-1 lg:grid-cols-12 gap-3 flex-1">
       <!-- Interactive Leaflet Map -->
-      <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden relative min-h-[300px] lg:min-h-[520px]">
-        <div id="map" class="w-full h-full min-h-[300px] lg:min-h-[520px] z-10"></div>
+      <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden relative">
+        <div id="map" class="z-10"></div>
       </div>
 
       <!-- Sorted Pit-Stop Feed -->
@@ -239,6 +244,8 @@
   </div>
 
   <script>
+    // @ts-nocheck
+
     // 1. Register Service Worker & PWA Install Prompt
     let deferredPrompt = null;
     if ('serviceWorker' in navigator) {
@@ -305,36 +312,6 @@
         bestFor: "Covered Basement Bike/Car Parking & Overnight Transit Stay",
         whatsapp: "",
         bookingUrl: "https://www.booking.com/searchresults.html?ss=Salem+India"
-      },
-      {
-        id: "stop-4",
-        name: "Biker's Pitstop Cafe — Mettupalayam Ghat Base",
-        category: "food",
-        lat: 11.3005,
-        lng: 76.9350,
-        detourMins: 2,
-        cleanWashroom: true,
-        safeParking: true,
-        open24x7: false,
-        verified: true,
-        bestFor: "Pre-Ghat Espresso, Bun Butter Jam & Helmet Rack",
-        whatsapp: "919842200002",
-        bookingUrl: ""
-      },
-      {
-        id: "stop-5",
-        name: "BPCL Highway Rest & Washroom Plaza — Dharmapuri",
-        category: "washroom",
-        lat: 12.1211,
-        lng: 78.1582,
-        detourMins: 1,
-        cleanWashroom: true,
-        safeParking: true,
-        open24x7: true,
-        verified: true,
-        bestFor: "24/7 Attended Restrooms, Drinking Water & Fuel",
-        whatsapp: "",
-        bookingUrl: ""
       }
     ];
 
@@ -344,18 +321,21 @@
     let activeCategory = 'all';
     let startCoords = [11.0168, 76.9558]; // Coimbatore
     let endCoords = [12.9716, 77.5946];   // Bengaluru
-    let routeCoords = [];                 // Array of [lat, lng]
+    let routeCoords = [];
     let totalDistanceKm = 0;
     let totalDurationMins = 0;
     let searchTimers = {};
 
-    // 4. Initialize Leaflet Map
+    // 4. Initialize Leaflet Map with Keyless OpenStreetMap Dark Tiles
     const map = L.map('map', { zoomControl: true }).setView([11.8, 77.4], 8);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap &copy; CARTO',
-      subdomains: 'abcd',
-      maxZoom: 19
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+      className: 'dark-tiles'
     }).addTo(map);
+
+    setTimeout(() => map.invalidateSize(), 300);
+    window.addEventListener('resize', () => map.invalidateSize());
 
     let routeLayer = L.layerGroup().addTo(map);
     let markersLayer = L.layerGroup().addTo(map);
@@ -470,7 +450,6 @@
         totalDistanceKm = Math.round(route.distance / 1000);
         totalDurationMins = Math.round(route.duration / 60);
       } catch (e) {
-        // Straight-line fallback if OSRM is temporarily busy
         routeCoords = [startCoords, endCoords];
         totalDistanceKm = Math.round(haversineKm(...startCoords, ...endCoords) * 1.2);
         totalDurationMins = Math.round(totalDistanceKm * 1.1);
@@ -480,8 +459,7 @@
       const mins = totalDurationMins % 60;
       summaryEl.textContent = `${totalDistanceKm} km • ~${hrs}h ${mins}m drive`;
 
-      // Draw Route Polyline + Start/End Markers
-      const poly = L.polyline(routeCoords, { color: '#f97316', weight: 5, opacity: 0.85 }).addTo(routeLayer);
+      const poly = L.polyline(routeCoords, { color: '#f97316', weight: 5, opacity: 0.9 }).addTo(routeLayer);
       L.circleMarker(startCoords, { radius: 7, color: '#22c55e', fillColor: '#22c55e', fillOpacity: 1 })
         .bindPopup('<b>Start:</b> ' + document.getElementById('startInput').value).addTo(routeLayer);
       L.circleMarker(endCoords, { radius: 7, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 1 })
@@ -498,7 +476,6 @@
       const req24x7 = document.getElementById('filter24x7').checked;
       const allPool = [...curatedStops, ...liveOsmStops];
 
-      // Sample ~60 points along route polyline for fast perpendicular distance checks
       const step = Math.max(1, Math.floor(routeCoords.length / 60));
       const sampled = [];
       let cumulativeKm = 0;
@@ -529,7 +506,6 @@
         }
 
         const estDetourMins = stop.detourMins || Math.max(1, Math.round(minKmOffRoute * 2));
-        // Keep stops within 8 km of highway and within user's max detour slider
         if (minKmOffRoute <= 8 && estDetourMins <= maxDetour) {
           matched.push({
             ...stop,
@@ -539,7 +515,6 @@
         }
       }
 
-      // Sort chronologically from Start -> Destination
       return matched.sort((a, b) => a.kmAhead - b.kmAhead);
     }
 
@@ -577,8 +552,7 @@
           ? `https://wa.me/${s.whatsapp}?text=${encodeURIComponent(`Hi ${s.name}, found you on PitStop OTW! Reaching in ~30 mins.`)}`
           : '';
 
-        // Add Map Marker
-        const marker = L.circleMarker([s.lat, s.lng], {
+        L.circleMarker([s.lat, s.lng], {
           radius: s.verified ? 8 : 6,
           color: s.verified ? '#f97316' : '#38bdf8',
           fillColor: s.verified ? '#fb923c' : '#0ea5e9',
@@ -651,7 +625,6 @@
       btn.disabled = true;
 
       try {
-        // Sample 4 evenly spaced midpoints along the route
         const sampleIndices = [0.2, 0.4, 0.6, 0.8].map(r => Math.floor(routeCoords.length * r));
         const aroundClauses = sampleIndices.map(idx => {
           const [lat, lng] = routeCoords[idx];
@@ -777,4 +750,3 @@
   </script>
 </body>
 </html>
-  
